@@ -8,6 +8,8 @@ import {
   useState,
 } from 'react'
 import BulkModelSelect from '@/components/bulk-model-select'
+import ResetPrompt from '@/components/reset-prompt'
+import { useBulkModelUndo } from '@/hooks/use-bulk-model-undo'
 import { useRouter } from 'next/navigation'
 
 import {
@@ -270,6 +272,11 @@ export default function ChiltrixClient({
     return [...saved, ...rest].slice(0, Math.max(6, saved.length))
   })()
 
+  const modelUndo = useBulkModelUndo(localSteps, setLocalSteps, (step) => step.key)
+  const [savedPrompts, setSavedPrompts] = useState(() => Object.fromEntries(
+    steps.map((step) => [`s${step.id}`, { systemPrompt: step.systemPrompt, userPrompt: step.userPrompt }])
+  ))
+
   const [activeSetId, setActiveSetId] = useState<number | null>(
     initialSet?.id ?? null
   )
@@ -376,10 +383,10 @@ export default function ChiltrixClient({
   }
 
   // ---- step mutation ----
-  const patchStep = (key: string, patch: Partial<EditableStep>) =>
-    setLocalSteps((prev) =>
-      prev.map((s) => (s.key === key ? { ...s, ...patch } : s))
-    )
+  const patchStep = (key: string, patch: Partial<EditableStep>) => {
+    if ('modelId' in patch || 'temperature' in patch) modelUndo.protect(key)
+    setLocalSteps((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)))
+  }
 
   // Pick a stable variable token for a step inserted AFTER position `index`.
   // Appending (or the very first step) gets the next plain integer; inserting in
@@ -653,6 +660,10 @@ export default function ChiltrixClient({
     if (result.ok) {
       setUpdateWarning(result.outputsWarning ?? null)
       setUpdateStatus('done')
+      setSavedPrompts(Object.fromEntries(localSteps.map((step) => [step.key, {
+        systemPrompt: step.systemPrompt, userPrompt: step.userPrompt,
+      }])))
+      modelUndo.clear()
       router.refresh()
     } else {
       setUpdateError(result.error ?? 'Unable to update.')
@@ -772,9 +783,10 @@ export default function ChiltrixClient({
   return (
     <div className="space-y-6">
       <BulkModelSelect models={options.models.map((model) => ({ ...model, provider_model_id: model.providerModelId, is_temperature_supported: model.isTemperatureSupported }))}
-        disabled={Object.values(cells).some((cell) => cell.status === 'loading')}
+        disabled={updateStatus === 'saving' || saveStatus === 'saving' || Object.values(cells).some((cell) => cell.status === 'loading')}
         description="Apply one model to every step, then change any step individually using its Model selector. Use Update this flavor or Save as new flavor to save your choices."
-        onApply={(model) => setLocalSteps((current) => current.map((step) => ({ ...step, modelId: model.id, temperature: model.is_temperature_supported ? step.temperature : null })))} />
+        canUndo={modelUndo.canUndo} onUndo={modelUndo.undo}
+        onApply={(model) => modelUndo.apply((step) => ({ modelId: model.id, temperature: model.is_temperature_supported ? step.temperature : null }))} />
       <div className="flex items-center justify-end gap-3">
         <p className="text-[11px] text-[rgb(var(--muted))]">
           Prompt &amp; step edits are local until you save them.
@@ -1107,6 +1119,9 @@ export default function ChiltrixClient({
                           />
                           {popOutButton({ kind: 'system', stepKey: step.key })}
                         </div>
+                        <ResetPrompt value={step.systemPrompt} savedValue={savedPrompts[step.key]?.systemPrompt}
+                          label={`step ${index + 1} system prompt`}
+                          disabled={updateStatus === 'saving'} onReset={(value) => patchStep(step.key, { systemPrompt: value })} />
                         <AutoTextarea
                           value={getValue({ kind: 'system', stepKey: step.key })}
                           onChange={(e) =>
@@ -1128,6 +1143,9 @@ export default function ChiltrixClient({
                           />
                           {popOutButton({ kind: 'user', stepKey: step.key })}
                         </div>
+                        <ResetPrompt value={step.userPrompt} savedValue={savedPrompts[step.key]?.userPrompt}
+                          label={`step ${index + 1} user prompt`}
+                          disabled={updateStatus === 'saving'} onReset={(value) => patchStep(step.key, { userPrompt: value })} />
                         <AutoTextarea
                           value={getValue({ kind: 'user', stepKey: step.key })}
                           onChange={(e) =>
@@ -1250,6 +1268,10 @@ export default function ChiltrixClient({
                 Close
               </button>
             </div>
+            {sidebar.kind !== 'output' ? <ResetPrompt key={`${sidebar.stepKey}:${sidebar.kind}`}
+              value={getValue(sidebar)}
+              savedValue={savedPrompts[sidebar.stepKey]?.[sidebar.kind === 'system' ? 'systemPrompt' : 'userPrompt']}
+              label={sidebarTitle} disabled={updateStatus === 'saving'} onReset={(value) => setValue(sidebar, value)} /> : null}
             <textarea
               value={getValue(sidebar)}
               onChange={(e) => setValue(sidebar, e.target.value)}

@@ -11,7 +11,7 @@ import { JsonTree } from '@/components/json-tree'
 // slot should behave.
 import BulkModelSelect, { type ModelChoice } from '@/components/bulk-model-select'
 import StepModelSelect from '@/components/step-model-select'
-import { assignStepModels } from '@/utils/step-models'
+import { assignStepModels, undoStepModels } from '@/utils/step-models'
 import ManualStepValue from '@/components/manual-step-value'
 import { parseManualStepOutput } from '@/utils/manual-step-output'
 
@@ -3590,6 +3590,14 @@ export default function OpsClient({
 }) {
   const router = useRouter()
   const [stepModels, setStepModels] = useState<Record<string, ModelChoice>>({})
+  const [modelHistory, setModelHistory] = useState<{
+    previous: Record<string, ModelChoice>; keys: string[]; applied: ModelChoice
+  } | null>(null)
+  const changeStepModel = (key: string, model: ModelChoice) => {
+    setModelHistory((history) => history ? { ...history, keys: history.keys.filter((entry) => entry !== key) } : null)
+    setStepModels((current) => assignStepModels(current, [key], model))
+  }
+
 
   // The pipeline this flavor runs: its own hand-built copy if registered,
   // else a DAG derived from the flavor's own DB steps.
@@ -5384,9 +5392,18 @@ export default function OpsClient({
       </div>
 
       <BulkModelSelect models={models} disabled={runningAll || batchRunning || Object.values(runState).some((state) => state.status === 'loading')}
-        onApply={(model) => setStepModels((current) => assignStepModels(current, OP_SPECS.filter((op) => op.kind === 'llm').map((op) => op.key), model))}
+        canUndo={modelHistory !== null} onUndo={() => {
+          if (!modelHistory) return
+          setStepModels((current) => undoStepModels(current, modelHistory.previous, modelHistory.keys, modelHistory.applied))
+          setModelHistory(null)
+        }}
+        onApply={(model) => {
+          const keys = OP_SPECS.filter((op) => op.kind === 'llm').map((op) => op.key)
+          setModelHistory({ previous: stepModels, keys, applied: model })
+          setStepModels((current) => assignStepModels(current, keys, model))
+        }}
         description="Apply one model to all LLM steps, then change any step individually below. Choices are local to this experiment. Save permanent model choices on the flavor page." />
-      {Object.keys(stepModels).length > 0 ? <button type="button" className="text-xs underline" disabled={runningAll || batchRunning || Object.values(runState).some((state) => state.status === 'loading')} onClick={() => setStepModels({})}>Restore configured models</button> : null}
+      {Object.keys(stepModels).length > 0 ? <button type="button" className="text-xs underline" disabled={runningAll || batchRunning || Object.values(runState).some((state) => state.status === 'loading')} onClick={() => { setStepModels({}); setModelHistory(null) }}>Restore configured models</button> : null}
 
       {/* Operations stacked down the page; each row is the card (left) with its
           output(s) to the right. A fan-out renders one column per branch.
@@ -5574,7 +5591,7 @@ export default function OpsClient({
                   providerModelId={stepModels[op.key]?.provider_model_id ?? op.providerModelId ?? step?.providerModelId ?? ''}
                   label={`Model for ${op.title}`}
                   disabled={runningAll || batchRunning || Object.values(runState).some((state) => state.status === 'loading')}
-                  onChange={(model) => setStepModels((current) => assignStepModels(current, [op.key], model))}
+                  onChange={(model) => changeStepModel(op.key, model)}
                 />
               </div>
             ) : null}
@@ -6374,7 +6391,7 @@ export default function OpsClient({
                   providerModelId={stepModels[detailOp.key]?.provider_model_id ?? detailOp.providerModelId ?? detailStep?.providerModelId ?? ''}
                   label={`Model for ${detailOp.title} in details`}
                   disabled={runningAll || batchRunning || Object.values(runState).some((state) => state.status === 'loading')}
-                  onChange={(model) => setStepModels((current) => assignStepModels(current, [detailOp.key], model))}
+                  onChange={(model) => changeStepModel(detailOp.key, model)}
                 />
               </div>
             ) : null}

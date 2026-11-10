@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import BulkModelSelect, { type ModelChoice } from '@/components/bulk-model-select'
 import StepModelSelect from '@/components/step-model-select'
+import { useBulkModelUndo } from '@/hooks/use-bulk-model-undo'
 import ManualStepValue from '@/components/manual-step-value'
 import { parseManualStepOutput } from '@/utils/manual-step-output'
 import { JsonTree } from '@/components/json-tree'
@@ -137,6 +138,7 @@ export default function OpsReverseClient({
 }) {
   const [manualValues, setManualValues] = useState<Record<number, string>>({})
   const [steps, setSteps] = useState(initialSteps)
+  const modelUndo = useBulkModelUndo(steps, setSteps, (step) => String(step.id))
   const preSteps = useMemo(() => {
     const tagged = steps.filter(isPreStep)
     const list = tagged.length
@@ -1530,12 +1532,12 @@ export default function OpsReverseClient({
               providerModelId={step.providerModelId}
               label={`Model for ${step.description || `step ${step.orderBy}`}`}
               disabled={runningAll || batchRunning || r1State.status === 'loading' || r2State.status === 'loading' || r4State.status === 'loading' || Object.values(middleStates).some((state) => state.status === 'loading') || Object.values(r3States).some((state) => state.status === 'loading')}
-              onChange={(model) => setSteps((current) => current.map((entry) => entry.id === step.id ? {
+              onChange={(model) => { modelUndo.protect(String(step.id)); setSteps((current) => current.map((entry) => entry.id === step.id ? {
                 ...entry,
                 providerModelId: model.provider_model_id,
                 isTemperatureSupported: model.is_temperature_supported,
                 temperature: model.is_temperature_supported ? entry.temperature : null,
-              } : entry))}
+              } : entry)) }}
             />
             {actions}
           </>}
@@ -1762,7 +1764,8 @@ export default function OpsReverseClient({
     <div className="flex flex-col gap-4">
       <BulkModelSelect models={models} disabled={runningAll || batchRunning || r1State.status === 'loading' || r2State.status === 'loading' || r4State.status === 'loading' || Object.values(middleStates).some((state) => state.status === 'loading') || Object.values(r3States).some((state) => state.status === 'loading')}
         description="Apply one model to all steps, then change any step individually below. Choices are local to this experiment. Save permanent model choices on the flavor page."
-        onApply={(model) => setSteps((current) => current.map((step) => ({ ...step, providerModelId: model.provider_model_id, isTemperatureSupported: model.is_temperature_supported, temperature: model.is_temperature_supported ? step.temperature : null })))} />
+        canUndo={modelUndo.canUndo} onUndo={modelUndo.undo}
+        onApply={(model) => modelUndo.apply((step) => ({ providerModelId: model.provider_model_id, isTemperatureSupported: model.is_temperature_supported, temperature: model.is_temperature_supported ? step.temperature : null }))} />
       {profilesTableMissing ? (
         <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-400">
           The <code>image_reaction_profiles</code> table does not exist yet in

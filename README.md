@@ -100,3 +100,18 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 ## thanks for reading!
 # HumorProjectToosoon
+
+## Recovering from chain edits
+
+In **Matrix** and **Chiltrix**, applying a model to all steps reveals **Undo last
+model change**. Undo restores the configuration immediately before that bulk
+change, including temperatures cleared by unsupported models. Individual model
+choices made afterward are preserved. The Ops and Ops Reverse experiment screens
+also support this undo control. Undo is local to the current editing session;
+saving an update establishes the new configuration.
+
+After editing a saved step's system or user prompt in Matrix or Chiltrix,
+**Reset prompt** appears beside that field (and in its pop-out editor). Choose
+**Reset prompt** again to confirm, or **Keep edits** to cancel. Reset restores
+only that field's last-saved text, leaving the other prompt and generated results
+alone. Newly added, unsaved steps have no saved prompt to reset to.

@@ -9,11 +9,13 @@ export type ModelChoice = {
   is_temperature_supported: boolean
 }
 
-export default function BulkModelSelect({ models, onApply, disabled, description }: {
+export default function BulkModelSelect({ models, onApply, disabled, description, canUndo, onUndo }: {
   models: ModelChoice[]
   onApply: (model: ModelChoice) => void | Promise<void>
   disabled?: boolean
   description: string
+  canUndo?: boolean
+  onUndo?: () => void
 }) {
   const [modelId, setModelId] = useState('')
   const [pending, setPending] = useState(false)
@@ -47,6 +49,11 @@ export default function BulkModelSelect({ models, onApply, disabled, description
         }} className="rounded-md bg-[rgb(var(--primary))] px-3 py-2 font-semibold text-[rgb(var(--on-primary))] disabled:opacity-50">
           {pending ? 'Applying…' : 'Apply to all steps'}
         </button>
+        {canUndo && onUndo ? <button type="button" disabled={disabled || pending}
+          className="rounded-md border border-[rgb(var(--primary)/0.4)] px-3 py-2 font-semibold disabled:opacity-50"
+          onClick={() => { onUndo(); setMessage('Bulk model change undone. Later individual choices were kept.') }}>
+          Undo last model change
+        </button> : null}
         <p role="status" className="text-xs">{message}</p>
       </div>
       <p className="mt-2 text-xs text-[rgb(var(--muted))]">{description}</p>
