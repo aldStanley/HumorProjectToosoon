@@ -115,3 +115,22 @@ After editing a saved step's system or user prompt in Matrix or Chiltrix,
 **Reset prompt** again to confirm, or **Keep edits** to cancel. Reset restores
 only that field's last-saved text, leaving the other prompt and generated results
 alone. Newly added, unsaved steps have no saved prompt to reset to.
+
+## Vercel Google sign-in
+
+Use `https://humor-project-toosoon-seven.vercel.app` as the stable application URL
+and `NEXT_PUBLIC_SITE_URL` for this Vercel project. Supabase Auth's Site URL should
+use that origin, with `https://humor-project-toosoon-seven.vercel.app/auth/callback`
+in its redirect allowlist. Local development can keep its own localhost callback.
+
+Google's authorized redirect URI is the Supabase callback:
+`https://hznrdovoayjsxwutoawy.supabase.co/auth/v1/callback`. Configure the Google
+client ID and matching secret in Supabase's Google provider settings. The login
+route lets Supabase select those credentials rather than overriding the client ID.
+
+When sign-in is started on a generated Vercel deployment URL, the app redirects
+the login POST to the stable domain before starting OAuth. Supabase stores the
+PKCE verifier cookie there, sends the user to Google, and returns the session to
+the same stable domain. New commit URLs do not need additional Google or Supabase
+redirect entries. Generated deployment URLs use the stable production app for
+sign-in rather than maintaining a separate signed-in preview session.

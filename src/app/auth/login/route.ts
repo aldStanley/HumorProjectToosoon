@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
 
 import { createClient } from '@/utils/supabase/server'
+import { getAuthSiteOrigin, getCanonicalLoginRedirect } from '@/utils/auth-site-url'
 
 export async function POST(request: Request) {
   const requestUrl = new URL(request.url)
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+  const siteUrl = getAuthSiteOrigin(process.env.NEXT_PUBLIC_SITE_URL)
   const origin = siteUrl ?? requestUrl.origin
-
-  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
   if (!siteUrl) {
     return NextResponse.redirect(
       `${origin}/login?message=` +
@@ -18,24 +17,18 @@ export async function POST(request: Request) {
     )
   }
 
-  const redirectTo = new URL('/auth/callback', siteUrl)
+  // Move to the stable domain BEFORE Supabase sets the PKCE verifier cookie.
+  // A 307 keeps the form POST, so login continues without another button click.
+  const canonicalLogin = getCanonicalLoginRedirect(request.url, siteUrl)
+  if (canonicalLogin) return NextResponse.redirect(canonicalLogin, 307)
 
-  if (!googleClientId) {
-    return NextResponse.redirect(
-      `${origin}/login?message=` +
-        encodeURIComponent(
-          'Google login is not configured. Please try again later.'
-        ),
-      303
-    )
-  }
+  const redirectTo = new URL('/auth/callback', siteUrl)
 
   const supabase = await createClient()
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo: redirectTo.toString(),
-      queryParams: { client_id: googleClientId },
     },
   })
 

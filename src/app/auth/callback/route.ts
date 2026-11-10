@@ -1,24 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import type { ProfileAdminFlag } from '@/types/profile'
+import { getAuthSiteOrigin } from '@/utils/auth-site-url'
 
 const FALLBACK_SITE_URL = 'http://localhost:3003'
 
-const getConfiguredSiteOrigin = () => {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim()
-  if (!siteUrl) {
-    return null
-  }
-
-  try {
-    return new URL(siteUrl).origin
-  } catch {
-    return null
-  }
-}
-
 const getRequestOrigin = (request: NextRequest) => {
-  const configuredSiteOrigin = getConfiguredSiteOrigin()
+  const configuredSiteOrigin = getAuthSiteOrigin(process.env.NEXT_PUBLIC_SITE_URL)
   if (configuredSiteOrigin) {
     return configuredSiteOrigin
   }
@@ -69,7 +57,7 @@ export async function GET(request: NextRequest) {
     console.error('Error exchanging code for session:', exchangeError)
     await supabase.auth.signOut({ scope: 'local' })
     return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent('Failed to exchange code')}`
+      `${origin}/login?error=${encodeURIComponent('Your sign-in session expired or started on a different app URL. Please sign in again.')}`
     )
   }
 
